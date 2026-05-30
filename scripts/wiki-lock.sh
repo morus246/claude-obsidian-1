@@ -151,11 +151,29 @@ is_alive() {
 # acquire/release/clear-stale don't race against each other.
 with_meta_lock() {
   ensure_dirs
-  # Use flock under bash's redirect; meta lock is short-lived per command.
+  # Prefer flock when available. macOS does not ship flock by default, so fall
+  # back to an atomic mkdir lock for the short-lived meta lock.
+  if command -v flock >/dev/null 2>&1; then
+    (
+      flock -x -w 5 9 || die "could not acquire meta-lock within 5s" 1
+      "$@"
+    ) 9>"$META_LOCK"
+    return $?
+  fi
+
+  local meta_lock_dir="${LOCK_DIR}/.wiki-lock.meta.lock"
+  local deadline
+  deadline=$(( $(now_epoch) + 5 ))
+  while ! mkdir "$meta_lock_dir" 2>/dev/null; do
+    [ "$(now_epoch)" -ge "$deadline" ] && die "could not acquire meta-lock within 5s" 1
+    sleep 0.1
+  done
+
   (
-    flock -x -w 5 9 || die "could not acquire meta-lock within 5s" 1
+    trap 'rm -rf "$meta_lock_dir"' EXIT INT TERM
+    printf '%s %s\n' "$$" "$(now_epoch)" > "${meta_lock_dir}/holder" 2>/dev/null || true
     "$@"
-  ) 9>"$META_LOCK"
+  )
 }
 
 read_lockfile() {

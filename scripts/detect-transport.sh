@@ -130,13 +130,13 @@ if command -v obsidian-cli >/dev/null 2>&1; then
   CLI_VERSION="$(printf '%s' "$CLI_VERSION_RAW" | json_escape || echo '"unknown"')"
 elif command -v obsidian >/dev/null 2>&1; then
   # Obsidian 1.12+ ships `obsidian` as the CLI binary on some platforms.
-  # We treat it as cli-capable if it accepts a --cli or --version flag without launching the GUI.
-  if obsidian --version >/dev/null 2>&1; then
-    CLI_PRESENT=true
-    CLI_BINARY="obsidian"
-    CLI_VERSION_RAW="$(obsidian --version 2>/dev/null | head -1 || echo unknown)"
-    CLI_VERSION="$(printf '%s' "$CLI_VERSION_RAW" | json_escape || echo '"unknown"')"
-  fi
+  # On macOS, probing `obsidian --version` or piping `obsidian help` can launch
+  # or hang the app. Presence of the binary is enough for transport selection;
+  # command-level failures are handled by the caller fallback chain.
+  CLI_PRESENT=true
+  CLI_BINARY="obsidian"
+  CLI_VERSION_RAW="Obsidian CLI"
+  CLI_VERSION="$(printf '%s' "$CLI_VERSION_RAW" | json_escape || echo '"unknown"')"
 fi
 # Fallback default when neither binary was found: must still be a valid JSON literal.
 if [ -z "$CLI_VERSION" ]; then

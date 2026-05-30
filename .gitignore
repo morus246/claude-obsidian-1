@@ -29,6 +29,9 @@ __pycache__/
 # Node
 node_modules/
 
+# User personal workspace (local notes, drafts, experiments)
+user/
+
 # Local secrets
 .env
 .env.local

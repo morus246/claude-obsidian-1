@@ -39,7 +39,24 @@ Before creating the session note, consult the vault's methodology mode via `pyth
 - **PARA**: `wiki/projects/inbox/<date>-<topic>.md` (user reroutes to specific projects)
 - **Zettelkasten**: `wiki/<ID>-session-<topic>.md` (timestamped ID becomes the filename prefix)
 
-If `.vault-meta/mode.json` is absent, the router returns mode=generic paths. **Important global rule**: per global CLAUDE.md `/save` convention, sessions for cross-project work should still file to `~/Documents/Obsidian Vault/sessions/` rather than the project's wiki. The mode router applies when filing to the project's own wiki/, not when filing to the global personal vault.
+If `.vault-meta/mode.json` is absent, the router returns mode=generic paths. **Important global rule**: per global CLAUDE.md or Codex AGENTS.md `/save` convention, cross-project saves file to `/Users/morus/Documents/GitHub/morus-brain/cofre` unless the user explicitly asks to save into the current project's wiki. The mode router applies when filing to the project's own wiki/, not when filing to the global personal vault.
+
+## Global `/save` destination (morus-brain)
+
+Default cross-project destination:
+
+```text
+/Users/morus/Documents/GitHub/morus-brain/cofre
+```
+
+For global saves, always update the daily note first:
+
+- Daily path: `01-daily/YYYY-MM-DD.md`
+- If missing, create it with frontmatter `date: YYYY-MM-DD` and `tags: [daily]`
+- Append section: `## HH:mm - Save: <title>`
+- Include current project context, 1-5 summary bullets, links to created artifacts, and status: `wiki criado`, `wiki atualizado`, or `daily only`
+
+Create or update `wiki/` only for durable knowledge: decisions, concepts, syntheses, references, important plans, or reusable discoveries. Do not create wiki pages for transient debugging, mechanical lookups, or low-signal notes. If the saved item is an executable plan, also save it to `05-plans/YYYY-MM-DD-<slug>.md` and link it from the daily.
 
 ## Concurrency (v1.7+)
 
@@ -71,6 +88,7 @@ Determine the best type from the conversation content:
 | source | wiki/sources/ | Summary of external material discussed in the session |
 | decision | wiki/meta/ | Architectural, project, or strategic decision that was made |
 | session | wiki/meta/ | Full session summary: captures everything discussed |
+| plan | 05-plans/ (global) or wiki/meta/ (project wiki) | Executable plan or roadmap worth keeping |
 
 If the user specifies a type, use that. If not, pick the best fit based on the content. When in doubt, use `synthesis`.
 
@@ -81,29 +99,30 @@ If the user specifies a type, use that. If not, pick the best fit based on the c
 **Step 0: Decide the destination root.** Check in order:
 
 1. **User explicit override.** If the user said "save to this project's wiki" / "save to the personal vault" / a specific path, respect it.
-2. **Project CLAUDE.md or global `~/.claude/CLAUDE.md` `/save` rule.** If either declares a personal-vault destination (e.g., `~/Documents/Obsidian Vault/`), that is the destination ROOT. The Note Type table below describes paths relative to whichever root is active. Append the new note to `<root>/log/ingest-log.md` at the top, in the format that file already uses.
-3. **Default.** The project's own `wiki/` folder.
+2. **Global personal vault rule.** If global `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or project instructions declare `/Users/morus/Documents/GitHub/morus-brain/cofre`, that is the destination root for `/save` from any project.
+3. **Default.** If no global rule exists and no override was given, use the project's own `wiki/` folder.
 
 The mode router (`python3 scripts/wiki-mode.py route session "<topic>"`) applies when filing into the project's own `wiki/`. When filing into a personal-vault root, use the canonical folders documented in that vault's CLAUDE.md (commonly `sessions/`, `concepts/`, `sources/`) — the mode router is NOT consulted for personal-vault writes by default. Filename sanitization (slug + safe_name) still applies regardless of root: strip path separators, NUL bytes, control chars, leading dots/hyphens.
 
 **Then continue the workflow:**
 
 1. **Scan** the current conversation. Identify the most valuable content to preserve.
-2. **Ask** (if not already named): "What should I call this note?" Keep the name short and descriptive.
-3. **Determine** note type using the table above.
-4. **Extract** all relevant content from the conversation. Rewrite it in declarative present tense (not "the user asked" but the actual content itself).
-5. **Create** the note in `<destination-root>/<chosen-folder>/<title>.md` (per Step 0). Full frontmatter. If a note with the same path already exists, ASK before overwriting.
-6. **Collect links**: identify any wiki pages mentioned in the conversation. Add them to `related` in frontmatter.
-7. **Update** `wiki/index.md`. Add the new entry at the top of the relevant section.
-8. **Append** to `wiki/log.md`. New entry at the TOP:
+2. **Name** the save. If not already named, choose a short descriptive title from the conversation.
+3. **Always update today's daily** when saving to the global vault. Append `## HH:mm - Save: <title>` with project context, 1-5 bullets, artifact links, and status.
+4. **Determine** whether durable wiki content is warranted using the Save vs. Skip criteria below.
+5. **If durable content exists**, determine note type using the table above and create or update the note in `<destination-root>/<chosen-folder>/<title>.md` (per Step 0). Full frontmatter. If a note with the same path already exists, update it only when it is clearly the same topic; otherwise ASK before overwriting.
+6. **If this is an executable plan**, save the plan to `<destination-root>/05-plans/YYYY-MM-DD-<slug>.md` and link it from the daily. Treat this as the artifact link for the daily status.
+7. **Collect links**: identify any wiki pages mentioned in the conversation. Add them to `related` in frontmatter when a wiki page is created or updated.
+8. **Update** `wiki/index.md` only when a wiki page was created or materially updated. Add the new entry at the top of the relevant section.
+9. **Append** to `wiki/log.md` only when a wiki page was created or materially updated. New entry at the TOP:
    ```
    ## [YYYY-MM-DD] save | Note Title
    - Type: [note type]
    - Location: wiki/[folder]/Note Title.md
    - From: conversation on [brief topic description]
    ```
-9. **Update** `wiki/hot.md` to reflect the new addition.
-10. **Confirm**: "Saved as [[Note Title]] in wiki/[folder]/."
+10. **Update** `wiki/hot.md` only when durable wiki content changed. Daily-only saves do not require hot-cache updates.
+11. **Confirm** with exact paths changed and whether status was `wiki criado`, `wiki atualizado`, or `daily only`.
 
 ---
 
