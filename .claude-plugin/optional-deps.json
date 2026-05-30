@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Optional dependencies for claude-obsidian. Each entry documents detection, install, and which features it unlocks.",
+  "deps": {
+    "defuddle": {
+      "binary": "defuddle",
+      "install_cmd": "npm install -g defuddle",
+      "setup_script": "bin/setup-defuddle.sh",
+      "docs_url": "https://github.com/kepano/defuddle",
+      "required_for": ["wiki-ingest (URL cleaning)", "defuddle skill"],
+      "fallback": "Raw WebFetch (40-60% more tokens, less clean output)",
+      "detect": "which defuddle 2>/dev/null"
+    },
+    "ollama": {
+      "binary": "ollama",
+      "install_cmd": "https://ollama.com/download",
+      "setup_script": "bin/setup-retrieve.sh",
+      "docs_url": "https://ollama.com",
+      "required_for": ["wiki-retrieve (cosine rerank stage)", "tiling-check.py"],
+      "model_required": "nomic-embed-text",
+      "model_pull_cmd": "ollama pull nomic-embed-text",
+      "fallback": "BM25-only retrieval (no semantic rerank)",
+      "detect": "which ollama 2>/dev/null && ollama list | grep -q nomic-embed-text"
+    },
+    "obsidian-cli": {
+      "binary": "obsidian-cli",
+      "install_cmd": "npm install -g @kepano/obsidian-cli",
+      "docs_url": "https://github.com/kepano/obsidian-cli",
+      "required_for": ["wiki-cli transport (tier 1)", "obsidian-cli skill"],
+      "fallback": "Filesystem transport (tier 3, no live Obsidian sync)",
+      "detect": "which obsidian-cli 2>/dev/null"
+    },
+    "mcp-obsidian": {
+      "binary": null,
+      "install_cmd": "See docs/install-guide.md §MCP transport",
+      "docs_url": "https://github.com/AgriciDaniel/claude-obsidian/blob/main/docs/install-guide.md",
+      "required_for": ["mcp-obsidian transport (tier 2)"],
+      "fallback": "Filesystem transport (tier 3)",
+      "detect": "grep -q mcp-obsidian ~/.claude/mcp.json 2>/dev/null"
+    }
+  }
+}

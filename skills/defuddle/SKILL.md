@@ -17,7 +17,8 @@ Use this before any URL ingestion. It is optional but strongly recommended. It c
 ## Install
 
 ```bash
-npm install -g defuddle-cli
+npm install -g defuddle
+# or: bash bin/setup-defuddle.sh
 ```
 
 Verify: `defuddle --version`
