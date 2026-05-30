@@ -68,6 +68,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import urllib.error
@@ -88,6 +89,11 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_TIMEOUT_SEC = 30
 CLAUDE_CLI_TIMEOUT_SEC = 60
+
+MINIMAX_PROXY_URL = "http://localhost:8788/v1/messages"
+MINIMAX_MODEL = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.7")
+MINIMAX_TIMEOUT_SEC = 30
+MMX_CONFIG_PATH = Path.home() / ".mmx" / "config.json"
 
 # Anthropic prompt caching ignores any cached prefix below the model's minimum
 # cacheable size — 4,096 tokens for Haiku 4.5 (verified against the prompt-caching
@@ -292,6 +298,78 @@ def claude_cli_prefix(page_title, page_body, chunk_text):
     return None
 
 
+def _read_minimax_key():
+    """Read MiniMax API key from MINIMAX_API_KEY env or ~/.mmx/config.json."""
+    k = os.environ.get("MINIMAX_API_KEY")
+    if k:
+        return k
+    if MMX_CONFIG_PATH.is_file():
+        try:
+            return json.loads(MMX_CONFIG_PATH.read_text(encoding="utf-8")).get("api_key") or ""
+        except (json.JSONDecodeError, OSError):
+            pass
+    return ""
+
+
+def _minimax_proxy_running():
+    """Non-blocking check: is proxy listening on localhost:8788?"""
+    try:
+        with socket.create_connection(("localhost", 8788), timeout=1.0):
+            return True
+    except OSError:
+        return False
+
+
+def minimax_proxy_prefix(api_key, page_title, page_body, chunk_text):
+    """MiniMax tier: Anthropic-compatible call via local proxy at localhost:8788.
+    No cache_control — proxy strips it; MiniMax doesn't support Anthropic caching.
+    """
+    system_msg = (
+        "You are a retrieval-augmentation assistant. Given a wiki page and one "
+        "chunk extracted from it, write a single short sentence (under 35 words) "
+        "that situates the chunk within the page's scope and topic. Output only "
+        "the sentence — no prefix, no quotation marks, no commentary."
+    )
+    payload = {
+        "model": MINIMAX_MODEL,
+        "max_tokens": 100,
+        "system": [
+            {"type": "text", "text": system_msg},
+            {"type": "text", "text": f"<page title=\"{page_title}\">\n{page_body}\n</page>"},
+        ],
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    "Write the single contextualizing sentence for this chunk:\n\n"
+                    f"<chunk>\n{chunk_text}\n</chunk>"
+                ),
+            }
+        ],
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        MINIMAX_PROXY_URL,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=MINIMAX_TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    return block["text"].strip().splitlines()[0]
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError) as e:
+        log(f"  minimax-proxy call failed: {e}")
+        return None
+    return None
+
+
 def pick_prefix_tier(force_synthetic, allow_egress=False):
     """Choose the contextual-prefix generation tier.
 
@@ -305,6 +383,8 @@ def pick_prefix_tier(force_synthetic, allow_egress=False):
     """
     if force_synthetic or not allow_egress:
         return "synthetic"
+    if _read_minimax_key() and _minimax_proxy_running():
+        return "minimax-proxy"
     if os.environ.get("ANTHROPIC_API_KEY"):
         return "anthropic-api"
     if shutil.which("claude"):
@@ -323,6 +403,15 @@ def generate_prefix(tier, fm, body, chunk_text):
       - tier="synthetic"     → always synthetic.
     """
     title = fm.get("title") or "(untitled)"
+    if tier == "minimax-proxy":
+        result = minimax_proxy_prefix(_read_minimax_key(), title, body, chunk_text)
+        if result:
+            return result, "minimax-proxy"
+        if shutil.which("claude"):
+            result = claude_cli_prefix(title, body, chunk_text)
+            if result:
+                return result, "claude-cli"
+        return synthetic_prefix(fm, body, chunk_text), "synthetic"
     if tier == "anthropic-api":
         result = anthropic_api_prefix(
             os.environ["ANTHROPIC_API_KEY"], title, body, chunk_text
