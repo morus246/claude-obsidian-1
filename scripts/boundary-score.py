@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """boundary-score.py — DragonScale Mechanism 4: boundary-first autoresearch scorer.
 
 Reads `wiki/**/*.md`, builds a wikilink graph, and emits per-page boundary

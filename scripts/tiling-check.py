@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """tiling-check.py — DragonScale Mechanism 3: semantic tiling lint.
 
 Computes per-page embeddings via a local ollama instance and reports
